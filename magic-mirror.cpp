@@ -23,6 +23,7 @@ using namespace cv;
 using namespace raspicam;
 
 const string WINDOW_NAME = "Magic Mirror";
+const string CROPED_WINDOW_NAME = "Croped Face";
 
 void read_csv(const string& filename, vector<Mat>& images, vector<int>& labels,
 		char separator = ';') {
@@ -63,20 +64,36 @@ void trainFromCamera(RaspiCam_Cv& camera, CascadeClassifier& face_cascade, Ptr<F
 				trainingImageCount++;
 				cout << "detected face for training" << endl;
 				for (int i = 0; i < faces.size(); i++) {
-
 					int x = faces[i].x;
 					int y = faces[i].y;
-					int h = y + faces[i].height;
-					int w = x + faces[i].width;
-					rectangle(captured, Point(x, y), Point(w, h),
+					int h = faces[i].height;
+					int h2 = h;
+					int w = faces[i].width;
+					int w2 = w;
+					rectangle(captured, Point(x, y), Point(x+w, y+h),
 							Scalar(0, 255, 0), 2, 8, 0);
 
-					Mat cropedFace = captured(faces[i]);
-					captured.copyTo(cropedFace);
+					if (h/w > 112/92) { // crop top and bottom
+						h2 = (112*w)/92;
+						y += (h-h2)/2;
+					} else { // crop left and right
+						w2 = (92*h)/112;
+						x += (w-w2)/2;
+					}
 
-					Size size(200, 200);
+					int x2 = x + w2;
+					int y2 = y + h2;
+
+					rectangle(captured, Point(x, y), Point(x2, y2),
+							Scalar(0, 255, 0), 2, 8, 0);
+
+					Mat cropedFace = captured(Rect(x,y,w2,h2)).clone();
+
+					Size size(92, 112);
 					Mat resizedCropedFace;
 					resize(cropedFace, resizedCropedFace, size);
+
+					imshow(CROPED_WINDOW_NAME, resizedCropedFace);
 
 					trainingImages.push_back(resizedCropedFace);
 					trainingLabels.push_back(0);
@@ -111,13 +128,16 @@ void trainFromCsv(const string& trainingDataCsvFile, Ptr<FaceRecognizer>& model)
 }
 
 string getNameForLabel(int label) {
+	string name = format("%d", label);
+	return name;
+	/*
 	switch(label) {
 		case 1:
 			return "Joe";
 		case 0:
 			return "Lasse";
 	}
-	return "Unbekannt";
+	return "Unbekannt";*/
 }
 
 int main(int argc, const char *argv[]) {
@@ -133,7 +153,7 @@ int main(int argc, const char *argv[]) {
 		CascadeClassifier face_cascade;
 		if (face_cascade.load("/usr/local/share/OpenCV/lbpcascades/lbpcascade_frontalface.xml")) {
 			namedWindow(WINDOW_NAME, WINDOW_AUTOSIZE);
-
+			namedWindow(CROPED_WINDOW_NAME, WINDOW_AUTOSIZE);
 			if (argc < 2) {
 				trainFromCamera(camera, face_cascade, model);
 			} else {
@@ -153,7 +173,7 @@ int main(int argc, const char *argv[]) {
 					if (faces.size() > 0) {
 						cout << "detected " << faces.size() << " faces" << endl;
 						for (int i = 0; i < faces.size(); i++) {
-
+/*
 							int x = faces[i].x;
 							int y = faces[i].y;
 							int h = y + faces[i].height;
@@ -165,9 +185,43 @@ int main(int argc, const char *argv[]) {
 							//cropedFace.copyTo(captured);
 							captured.copyTo(cropedFace);
 
-							Size size(200,200);
+							Size size(92,112);
 							Mat resizedCropedFace;
 							resize(cropedFace, resizedCropedFace, size);
+
+							imshow(CROPED_WINDOW_NAME, resizedCropedFace);
+
+*/
+							int x = faces[i].x;
+							int y = faces[i].y;
+							int h = faces[i].height;
+							int h2 = h;
+							int w = faces[i].width;
+							int w2 = w;
+							rectangle(captured, Point(x, y), Point(x+w, y+h),
+									Scalar(0, 255, 0), 2, 8, 0);
+
+							if (h/w > 112/92) { // crop top and bottom
+								h2 = (112*w)/92;
+								y += (h-h2)/2;
+							} else { // crop left and right
+								w2 = (92*h)/112;
+								x += (w-w2)/2;
+							}
+
+							int x2 = x + w2;
+							int y2 = y + h2;
+
+							rectangle(captured, Point(x, y), Point(x2, y2),
+									Scalar(0, 255, 0), 2, 8, 0);
+
+							Mat cropedFace = captured(Rect(x,y,w2,h2)).clone();
+
+							Size size(92, 112);
+							Mat resizedCropedFace;
+							resize(cropedFace, resizedCropedFace, size);
+
+							imshow(CROPED_WINDOW_NAME, resizedCropedFace);
 
 							int predictedLabel = -1;
 							double confidence = 0.0;
