@@ -25,6 +25,8 @@ using namespace raspicam;
 const string WINDOW_NAME = "Magic Mirror";
 const string CROPED_WINDOW_NAME = "Croped Face";
 
+vector<string> subjectNames;
+
 void read_csv(const string& filename, vector<Mat>& images, vector<int>& labels,
 		char separator = ';') {
 	puts("Reading CSV file...");
@@ -47,69 +49,92 @@ void read_csv(const string& filename, vector<Mat>& images, vector<int>& labels,
 	puts("Done reading CSV file.");
 }
 
-void trainFromCamera(RaspiCam_Cv& camera, CascadeClassifier& face_cascade, Ptr<FaceRecognizer>& model) {
-	cout << "Training by capturing from camera" << endl;
-	int trainingImageCount = 0;
+Mat captureSingleImage(RaspiCam_Cv& camera, CascadeClassifier& face_cascade) {
+	cout << "Capturing single image..." << endl;
 	Mat captured;
 	vector<Rect> faces;
-	vector<Mat> trainingImages;
-	vector<int> trainingLabels;
-	while (trainingImageCount < 10) {
+	while (true) {
 		try {
 			camera.grab();
 			camera.retrieve(captured);
-
-			face_cascade.detectMultiScale(captured, faces, 1.1, 2, 0,Size(80, 80));
-			if (faces.size() == 1) {
-				trainingImageCount++;
-				cout << "detected face for training" << endl;
-				for (int i = 0; i < faces.size(); i++) {
-					int x = faces[i].x;
-					int y = faces[i].y;
-					int h = faces[i].height;
-					int h2 = h;
-					int w = faces[i].width;
-					int w2 = w;
-					rectangle(captured, Point(x, y), Point(x+w, y+h),
-							Scalar(0, 255, 0), 2, 8, 0);
-
-					if (h/w > 112/92) { // crop top and bottom
-						h2 = (112*w)/92;
-						y += (h-h2)/2;
-					} else { // crop left and right
-						w2 = (92*h)/112;
-						x += (w-w2)/2;
-					}
-
-					int x2 = x + w2;
-					int y2 = y + h2;
-
-					rectangle(captured, Point(x, y), Point(x2, y2),
-							Scalar(0, 255, 0), 2, 8, 0);
-
-					Mat cropedFace = captured(Rect(x,y,w2,h2)).clone();
-
-					Size size(92, 112);
-					Mat resizedCropedFace;
-					resize(cropedFace, resizedCropedFace, size);
-
-					imshow(CROPED_WINDOW_NAME, resizedCropedFace);
-
-					trainingImages.push_back(resizedCropedFace);
-					trainingLabels.push_back(0);
-				}
-			} else {
-				cout << "no face detected" << endl;
-			}
 			imshow(WINDOW_NAME, captured);
 			waitKey(30);
+			face_cascade.detectMultiScale(captured, faces, 1.1, 2, 0,Size(80, 80));
+			if (faces.size() == 1) {
+				cout << "Detected face!" << endl;
+				int x = faces[0].x;
+				int y = faces[0].y;
+				int h = faces[0].height;
+				int h2 = h;
+				int w = faces[0].width;
+				int w2 = w;
+				rectangle(captured, Point(x, y), Point(x+w, y+h),
+						Scalar(0, 255, 0), 2, 8, 0);
+
+				if (h/w > 112/92) { // crop top and bottom
+					h2 = (112*w)/92;
+					y += (h-h2)/2;
+				} else { // crop left and right
+					w2 = (92*h)/112;
+					x += (w-w2)/2;
+				}
+
+				int x2 = x + w2;
+				int y2 = y + h2;
+
+				rectangle(captured, Point(x, y), Point(x2, y2),
+						Scalar(0, 255, 0), 2, 8, 0);
+
+				Mat cropedFace = captured(Rect(x,y,w2,h2)).clone();
+
+				Size size(92, 112);
+				Mat resizedCropedFace;
+				resize(cropedFace, resizedCropedFace, size);
+
+				imshow(CROPED_WINDOW_NAME, resizedCropedFace);
+				waitKey(30);
+				return resizedCropedFace;
+			} else {
+				cout << "no face or multiple faces detected" << endl;
+			}
 		} catch (cv::Exception& e) {
 			cerr << "Error: " << e.msg << endl;
 		}
 	}
-	cout << "Starting training..." << endl;
+}
+
+void addTrainingDataForOneSubject(RaspiCam_Cv& camera, CascadeClassifier& face_cascade,
+		vector<Mat>& trainingImages, vector<int>& trainingLabels, int subjectId)
+{
+	cout << "Adding training data for subject " << subjectId << endl;
+	Mat captured;
+	vector<Rect> faces;
+	//for (int i = 0; i < 10; i++) {
+	for (int i = 0; i < 2; i++) {
+		Mat captured = captureSingleImage(camera, face_cascade);
+		trainingImages.push_back(captured);
+		trainingLabels.push_back(subjectId);
+	}
+	cout << "Done adding training data for subject " << subjectId << endl;
+}
+
+void trainFromCamera(RaspiCam_Cv& camera, CascadeClassifier& face_cascade, Ptr<FaceRecognizer>& model) {
+	vector<Mat> trainingImages;
+	vector<int> trainingLabels;
+	int subjectCount = 0;
+	string subjectName;
+	cout << "Capturing training data from camera..." << endl;
+	cout << "Amount of subjects: ";
+	cin >> subjectCount;
+	for (int i = 0; i < subjectCount; i++) {
+		cout << "Capturing training data for subject " << i << ". Enter name:";
+		cin >> subjectName;
+		subjectNames.push_back(subjectName);
+		addTrainingDataForOneSubject(camera, face_cascade, trainingImages, trainingLabels, i);
+	}
+	cout << "Done capturing images. Starting training..." << endl;
 	model->train(trainingImages, trainingLabels);
-	cout << "Training completed" << endl;
+	cout << "Training completed." << endl;
 }
 
 void trainFromCsv(const string& trainingDataCsvFile, Ptr<FaceRecognizer>& model) {
@@ -127,19 +152,6 @@ void trainFromCsv(const string& trainingDataCsvFile, Ptr<FaceRecognizer>& model)
 	cout << "Training completed" << endl;
 }
 
-string getNameForLabel(int label) {
-	string name = format("%d", label);
-	return name;
-	/*
-	switch(label) {
-		case 1:
-			return "Joe";
-		case 0:
-			return "Lasse";
-	}
-	return "Unbekannt";*/
-}
-
 int main(int argc, const char *argv[]) {
 	cout << "Opening Camera..." << endl;
 	RaspiCam_Cv camera;
@@ -147,7 +159,6 @@ int main(int argc, const char *argv[]) {
 
 	Ptr<FaceRecognizer> model = createEigenFaceRecognizer();
 	//Ptr<FaceRecognizer> model = createEigenFaceRecognizer(0, 200.0);
-
 
 	if (camera.open()) {
 		CascadeClassifier face_cascade;
@@ -161,87 +172,20 @@ int main(int argc, const char *argv[]) {
 				trainFromCsv(trainingDataCsvFile, model);
 			}
 
-			std::vector<Rect> faces;
-			Mat captured;
+			while(1) {
+				//std::vector<Rect> faces;
+				Mat resizedCropedFace = captureSingleImage(camera, face_cascade);
+				int predictedLabel = -1;
+				double confidence = 0.0;
 
-			while (1) {
-				try {
-					camera.grab();
-					camera.retrieve(captured);
+				//predictedLabel = model->predict(resizedCropedFace);
+				model->predict(resizedCropedFace, predictedLabel, confidence);
 
-					face_cascade.detectMultiScale(captured, faces, 1.1, 2, 0, Size(80, 80));
-					if (faces.size() > 0) {
-						cout << "detected " << faces.size() << " faces" << endl;
-						for (int i = 0; i < faces.size(); i++) {
-/*
-							int x = faces[i].x;
-							int y = faces[i].y;
-							int h = y + faces[i].height;
-							int w = x + faces[i].width;
-							rectangle(captured, Point(x, y), Point(w, h), Scalar(0, 255, 0), 2, 8, 0);
+				string result_message = format("Predicted label = %d, Confidence = %f.", predictedLabel, confidence);
+				cout << result_message << endl;
 
-
-							Mat cropedFace = captured(faces[i]);
-							//cropedFace.copyTo(captured);
-							captured.copyTo(cropedFace);
-
-							Size size(92,112);
-							Mat resizedCropedFace;
-							resize(cropedFace, resizedCropedFace, size);
-
-							imshow(CROPED_WINDOW_NAME, resizedCropedFace);
-
-*/
-							int x = faces[i].x;
-							int y = faces[i].y;
-							int h = faces[i].height;
-							int h2 = h;
-							int w = faces[i].width;
-							int w2 = w;
-							rectangle(captured, Point(x, y), Point(x+w, y+h),
-									Scalar(0, 255, 0), 2, 8, 0);
-
-							if (h/w > 112/92) { // crop top and bottom
-								h2 = (112*w)/92;
-								y += (h-h2)/2;
-							} else { // crop left and right
-								w2 = (92*h)/112;
-								x += (w-w2)/2;
-							}
-
-							int x2 = x + w2;
-							int y2 = y + h2;
-
-							rectangle(captured, Point(x, y), Point(x2, y2),
-									Scalar(0, 255, 0), 2, 8, 0);
-
-							Mat cropedFace = captured(Rect(x,y,w2,h2)).clone();
-
-							Size size(92, 112);
-							Mat resizedCropedFace;
-							resize(cropedFace, resizedCropedFace, size);
-
-							imshow(CROPED_WINDOW_NAME, resizedCropedFace);
-
-							int predictedLabel = -1;
-							double confidence = 0.0;
-
-							//predictedLabel = model->predict(resizedCropedFace);
-							model->predict(resizedCropedFace, predictedLabel, confidence);
-							string result_message = format("Predicted label = %d, Confidence = %f.", predictedLabel, confidence);
-							cout << result_message << endl;
-
-							putText(captured, getNameForLabel(predictedLabel), Point(x, y - 5),
-									FONT_HERSHEY_COMPLEX_SMALL, 0.8, Scalar(0, 255, 0), 1, CV_AA);
-						}
-					} else {
-						cout << "no face detected" << endl;
-					}
-					imshow(WINDOW_NAME, captured);
-					waitKey(30);
-				} catch (cv::Exception& e) {
-					cerr << "Error: " << e.msg << endl;
-				}
+				string name = subjectNames[predictedLabel];
+				cout << "Recognized subject " << name << endl;
 			}
 			//cout << "Stopping camera..." << endl;
 			//camera.release();
