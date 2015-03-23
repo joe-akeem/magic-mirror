@@ -85,6 +85,9 @@ Mat captureSingleImage(RaspiCam_Cv& camera, CascadeClassifier& face_cascade) {
 				rectangle(captured, Point(x, y), Point(x2, y2),
 						Scalar(0, 255, 0), 2, 8, 0);
 
+				imshow(WINDOW_NAME, captured);
+				waitKey(30);
+
 				Mat cropedFace = captured(Rect(x,y,w2,h2)).clone();
 
 				Size size(92, 112);
@@ -104,17 +107,22 @@ Mat captureSingleImage(RaspiCam_Cv& camera, CascadeClassifier& face_cascade) {
 }
 
 void addTrainingDataForOneSubject(RaspiCam_Cv& camera, CascadeClassifier& face_cascade,
-		vector<Mat>& trainingImages, vector<int>& trainingLabels, int subjectId)
+		vector<Mat>& trainingImages, vector<int>& trainingLabels, int subjectId, const char* name)
 {
+	string message = format("./speech.sh %s, bitte schaue mich an, so dass ich Dich kennen lernen kann", name);
+	system(message.c_str());
 	cout << "Adding training data for subject " << subjectId << endl;
 	Mat captured;
 	vector<Rect> faces;
 	//for (int i = 0; i < 10; i++) {
-	for (int i = 0; i < 2; i++) {
+	for (int i = 0; i < 10; i++) {
 		Mat captured = captureSingleImage(camera, face_cascade);
+		system("./speech.sh So kann ich Dich gut erkennen.");
 		trainingImages.push_back(captured);
 		trainingLabels.push_back(subjectId);
 	}
+	message = format("./speech.sh Das wars %s. Jetzt kenn ich Dich.", name);
+	system(message.c_str());
 	cout << "Done adding training data for subject " << subjectId << endl;
 }
 
@@ -124,17 +132,21 @@ void trainFromCamera(RaspiCam_Cv& camera, CascadeClassifier& face_cascade, Ptr<F
 	int subjectCount = 0;
 	string subjectName;
 	cout << "Capturing training data from camera..." << endl;
+	system("./speech.sh Wie viele Personen spielen mit?");
 	cout << "Amount of subjects: ";
 	cin >> subjectCount;
 	for (int i = 0; i < subjectCount; i++) {
+		string message = format("./speech.sh Tippe den Namen der %d. Person ein.", i+1);
+		system(message.c_str());
 		cout << "Capturing training data for subject " << i << ". Enter name:";
 		cin >> subjectName;
 		subjectNames.push_back(subjectName);
-		addTrainingDataForOneSubject(camera, face_cascade, trainingImages, trainingLabels, i);
+		addTrainingDataForOneSubject(camera, face_cascade, trainingImages, trainingLabels, i, subjectName.c_str());
 	}
 	cout << "Done capturing images. Starting training..." << endl;
 	model->train(trainingImages, trainingLabels);
 	cout << "Training completed." << endl;
+	system("./speech So, jetzt kenne ich Euch. Es kann los gehen.");
 }
 
 void trainFromCsv(const string& trainingDataCsvFile, Ptr<FaceRecognizer>& model) {
@@ -184,8 +196,17 @@ int main(int argc, const char *argv[]) {
 				string result_message = format("Predicted label = %d, Confidence = %f.", predictedLabel, confidence);
 				cout << result_message << endl;
 
-				string name = subjectNames[predictedLabel];
-				cout << "Recognized subject " << name << endl;
+				if (confidence < 2000.0) {
+					string name = subjectNames[predictedLabel];
+					cout << "Recognized subject " << name << endl;
+					string message = format("./speech.sh Hallo %s! Wie geht es dir?", name.c_str());
+					system(message.c_str());
+				} else {
+					cout << "Unrecogniced face." << endl;
+					system("./speech.sh Hallo Fremder!");
+				}
+
+
 			}
 			//cout << "Stopping camera..." << endl;
 			//camera.release();
