@@ -27,28 +27,6 @@ const string CROPED_WINDOW_NAME = "Croped Face";
 
 vector<string> subjectNames;
 
-void read_csv(const string& filename, vector<Mat>& images, vector<int>& labels,
-		char separator = ';') {
-	puts("Reading CSV file...");
-	ifstream file(filename.c_str(), ifstream::in);
-	if (!file) {
-		string error_message =
-				"No valid input file was given, please check the given filename.";
-		CV_Error(CV_StsBadArg, error_message);
-	}
-	string line, path, classlabel;
-	while (getline(file, line)) {
-		stringstream liness(line);
-		getline(liness, path, separator);
-		getline(liness, classlabel);
-		if (!path.empty() && !classlabel.empty()) {
-			images.push_back(imread(path, 0));
-			labels.push_back(atoi(classlabel.c_str()));
-		}
-	}
-	puts("Done reading CSV file.");
-}
-
 Mat captureSingleImage(RaspiCam_Cv& camera, CascadeClassifier& face_cascade) {
 	cout << "Capturing single image..." << endl;
 	Mat captured;
@@ -114,7 +92,6 @@ void addTrainingDataForOneSubject(RaspiCam_Cv& camera, CascadeClassifier& face_c
 	cout << "Adding training data for subject " << subjectId << endl;
 	Mat captured;
 	vector<Rect> faces;
-	//for (int i = 0; i < 10; i++) {
 	for (int i = 0; i < 10; i++) {
 		Mat captured = captureSingleImage(camera, face_cascade);
 		system("./speech.sh So kann ich Dich gut erkennen.");
@@ -149,21 +126,6 @@ void trainFromCamera(RaspiCam_Cv& camera, CascadeClassifier& face_cascade, Ptr<F
 	system("./speech So, jetzt kenne ich Euch. Es kann los gehen.");
 }
 
-void trainFromCsv(const string& trainingDataCsvFile, Ptr<FaceRecognizer>& model) {
-	vector<Mat> trainingImages;
-	vector<int> trainingLabels;
-	cout << "Training from CSV file '" << trainingDataCsvFile << "'" << endl;;
-	try {
-		read_csv(trainingDataCsvFile, trainingImages, trainingLabels);
-	} catch (cv::Exception& e) {
-		cerr << "Error opening file \"" << trainingDataCsvFile << ": " << e.msg << endl;
-		exit(EXIT_FAILURE);
-	}
-	cout << "Starting training..." << endl;
-	model->train(trainingImages, trainingLabels);
-	cout << "Training completed" << endl;
-}
-
 int main(int argc, const char *argv[]) {
 	cout << "Opening Camera..." << endl;
 	RaspiCam_Cv camera;
@@ -177,15 +139,9 @@ int main(int argc, const char *argv[]) {
 		if (face_cascade.load("/usr/local/share/OpenCV/lbpcascades/lbpcascade_frontalface.xml")) {
 			namedWindow(WINDOW_NAME, WINDOW_AUTOSIZE);
 			namedWindow(CROPED_WINDOW_NAME, WINDOW_AUTOSIZE);
-			if (argc < 2) {
-				trainFromCamera(camera, face_cascade, model);
-			} else {
-				string trainingDataCsvFile = string(argv[1]);
-				trainFromCsv(trainingDataCsvFile, model);
-			}
+			trainFromCamera(camera, face_cascade, model);
 
 			while(1) {
-				//std::vector<Rect> faces;
 				Mat resizedCropedFace = captureSingleImage(camera, face_cascade);
 				int predictedLabel = -1;
 				double confidence = 0.0;
@@ -208,8 +164,6 @@ int main(int argc, const char *argv[]) {
 
 
 			}
-			//cout << "Stopping camera..." << endl;
-			//camera.release();
 		} else {
 			cout << "failed to load file /usr/local/share/OpenCV/lbpcascades/lbpcascade_frontalface.xml" << endl;
 			exit(EXIT_FAILURE);
