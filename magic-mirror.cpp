@@ -26,6 +26,7 @@ const string WINDOW_NAME = "Magic Mirror";
 const string CROPED_WINDOW_NAME = "Croped Face";
 
 vector<string> subjectNames;
+bool headless = false;
 
 Mat captureSingleImage(RaspiCam_Cv& camera, CascadeClassifier& face_cascade) {
 	cout << "Capturing single image..." << endl;
@@ -35,8 +36,10 @@ Mat captureSingleImage(RaspiCam_Cv& camera, CascadeClassifier& face_cascade) {
 		try {
 			camera.grab();
 			camera.retrieve(captured);
-			imshow(WINDOW_NAME, captured);
-			waitKey(30);
+			if (!headless) {
+				imshow(WINDOW_NAME, captured);
+				waitKey(30);
+			}
 			face_cascade.detectMultiScale(captured, faces, 1.1, 2, 0,Size(80, 80));
 			if (faces.size() == 1) {
 				cout << "Detected face!" << endl;
@@ -63,8 +66,10 @@ Mat captureSingleImage(RaspiCam_Cv& camera, CascadeClassifier& face_cascade) {
 				rectangle(captured, Point(x, y), Point(x2, y2),
 						Scalar(0, 255, 0), 2, 8, 0);
 
-				imshow(WINDOW_NAME, captured);
-				waitKey(30);
+				if (!headless) {
+					imshow(WINDOW_NAME, captured);
+					waitKey(30);
+				}
 
 				Mat cropedFace = captured(Rect(x,y,w2,h2)).clone();
 
@@ -72,8 +77,10 @@ Mat captureSingleImage(RaspiCam_Cv& camera, CascadeClassifier& face_cascade) {
 				Mat resizedCropedFace;
 				resize(cropedFace, resizedCropedFace, size);
 
-				imshow(CROPED_WINDOW_NAME, resizedCropedFace);
-				waitKey(30);
+				if (!headless) {
+					imshow(CROPED_WINDOW_NAME, resizedCropedFace);
+					waitKey(30);
+				}
 				return resizedCropedFace;
 			} else {
 				cout << "no face or multiple faces detected" << endl;
@@ -127,6 +134,12 @@ void trainFromCamera(RaspiCam_Cv& camera, CascadeClassifier& face_cascade, Ptr<F
 }
 
 int main(int argc, const char *argv[]) {
+
+	if (argc > 1) {
+		cout << "Running in headless mode." << endl;
+		headless = true;
+	}
+
 	cout << "Opening Camera..." << endl;
 	RaspiCam_Cv camera;
 	camera.set(CV_CAP_PROP_FORMAT, CV_8UC1);
@@ -137,8 +150,10 @@ int main(int argc, const char *argv[]) {
 	if (camera.open()) {
 		CascadeClassifier face_cascade;
 		if (face_cascade.load("/usr/local/share/OpenCV/lbpcascades/lbpcascade_frontalface.xml")) {
-			namedWindow(WINDOW_NAME, WINDOW_AUTOSIZE);
-			namedWindow(CROPED_WINDOW_NAME, WINDOW_AUTOSIZE);
+			if (!headless) {
+				namedWindow(WINDOW_NAME, WINDOW_AUTOSIZE);
+				namedWindow(CROPED_WINDOW_NAME, WINDOW_AUTOSIZE);
+			}
 			trainFromCamera(camera, face_cascade, model);
 
 			while(1) {
@@ -161,8 +176,6 @@ int main(int argc, const char *argv[]) {
 					cout << "Unrecogniced face." << endl;
 					system("./speech.sh Hallo Fremder!");
 				}
-
-
 			}
 		} else {
 			cout << "failed to load file /usr/local/share/OpenCV/lbpcascades/lbpcascade_frontalface.xml" << endl;
